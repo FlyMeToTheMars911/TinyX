@@ -55,7 +55,7 @@ node --test tests/content-mode.test.cjs
 
 WebView2 使用固定版本 NuGet 引用和 `packages.lock.json`；Evergreen 浏览器运行时随系统更新。WinForms 不启用裁剪。
 
-GitHub Actions 在推送和 PR 时运行脚本回归检查并打包；推送 `v*` 标签时将 ZIP 附加到 GitHub Release。
+GitHub Actions 在推送和 PR 时运行脚本回归检查并打包；推送 `v*` 标签时将 ZIP 与 SHA256 校验文件附加到 GitHub Release，也支持更新已创建的同名发布。
 
 ## 验证与边界
 

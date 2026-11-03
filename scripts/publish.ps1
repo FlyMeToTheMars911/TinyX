@@ -34,5 +34,9 @@ if ($runningPackage) {
 New-Item -ItemType Directory -Path $publishDirectory -Force | Out-Null
 Copy-Item -Path (Join-Path $stagingDirectory '*') -Destination $publishDirectory -Recurse -Force
 Compress-Archive -Path (Join-Path $stagingDirectory '*') -DestinationPath $archivePath -Force
+$archiveHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+[System.IO.File]::WriteAllText($archivePath + '.sha256',
+    $archiveHash + '  ' + [System.IO.Path]::GetFileName($archivePath) + [Environment]::NewLine,
+    [System.Text.UTF8Encoding]::new($false))
 Write-Output "Application: $(Join-Path $publishDirectory 'TinyX.exe')"
 Write-Output "Archive: $archivePath"
