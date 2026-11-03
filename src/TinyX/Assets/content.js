@@ -4,15 +4,22 @@
     const CONTENT_CLASS = "tinyx-content-mode";
     const HOME_CLASS = "tinyx-route-home";
     const COMPOSER_CLASS = "tinyx-home-composer";
-    const HOME_NAVIGATION_CLASS = "tinyx-home-navigation";
+    const DOCUMENT_SCROLL_CLASS = "tinyx-document-scroll";
+    const MODAL_CLASS = "tinyx-modal-open";
+    const LAYOUT_CLASS = "tinyx-content-row";
     const REFRESH_DELAY_MS = 120;
     const MAX_PENDING_ROOTS = 48;
-    const MAX_COMPOSER_ANCESTORS = 8;
+    const MAX_COMPOSER_ANCESTORS = 40;
+    const MAX_LAYOUT_ANCESTORS = 5;
     const ALLOWED_HOSTS = new Set(["x.com", "www.x.com", "twitter.com", "www.twitter.com"]);
     const LOGIN_MARKERS = '[data-testid="LoginForm_Login_Button"], input[autocomplete="current-password"], [role="dialog"] input[autocomplete="username"], #arkoseFrame';
     const ACCOUNT_MARKERS = '[data-testid="SideNav_AccountSwitcher_Button"], [data-testid="AppTabBar_Profile_Link"], [data-testid="SideNav_NewTweet_Button"]';
     const PRIMARY_COLUMN = '[data-testid="primaryColumn"]';
     const VIDEO_PLAYER = '[data-testid="videoPlayer"]';
+    const MODAL_MARKERS = '[role="dialog"], [aria-modal="true"]';
+    const COMPOSER_BUTTONS = '[data-testid="tweetButtonInline"], [data-testid="tweetButton"]';
+    const COMPOSER_BOUNDARIES = 'article, [data-testid="tweet"], [data-testid="cellInnerDiv"], [data-testid="virtualScroller"], [role="list"], [role="region"], section, main, [role="dialog"], [aria-modal="true"]';
+    const REPLY_OR_DIALOG_ANCESTORS = 'article, [data-testid="tweet"], [data-testid="cellInnerDiv"], [data-testid="virtualScroller"], [role="dialog"], [aria-modal="true"]';
     const AUTH_PATH = /^\/(?:i\/flow|login|signup|account\/access|i\/oauth2|oauth)(?:\/|$)/i;
 
     const isLocalFixture = window.__tinyXAllowLocalFixture === true && location.href === "about:blank";
@@ -33,8 +40,9 @@
     let approvedVideos = new WeakSet();
     let approvedPlayers = new WeakSet();
     const processedVideos = new WeakSet();
-    const processedHomeNavigation = new WeakSet();
     const pendingRoots = new Set();
+    let markedComposer = null;
+    let layoutWrappers = [];
 
     function isPageVisible() {
         return hostVisible && !document.hidden;
@@ -86,53 +94,66 @@
             !!document.querySelector(ACCOUNT_MARKERS);
     }
 
-    function markHomeComposer() {
-        const primary = document.querySelector(PRIMARY_COLUMN);
-        if (!primary) {
-            return;
-        }
-        const editor = primary.querySelector('[data-testid="tweetTextarea_0"]');
-        if (!editor || editor.closest('[role="dialog"], [aria-modal="true"]')) {
-            return;
-        }
-        let candidate = editor.parentElement;
-        for (let depth = 0; candidate && candidate !== primary && depth < MAX_COMPOSER_ANCESTORS; depth += 1) {
-            if (candidate.querySelector('article, [data-testid="tweet"]')) {
-                return;
+    function hasVisibleModal() {
+        const dialogs = document.querySelectorAll(MODAL_MARKERS);
+        for (const dialog of dialogs) {
+            if (dialog.getClientRects().length && getComputedStyle(dialog).visibility !== "hidden") {
+                return true;
             }
-            if (candidate.querySelector('[data-testid="tweetButtonInline"]')) {
-                candidate.classList.add(COMPOSER_CLASS);
-                return;
-            }
-            candidate = candidate.parentElement;
         }
+        return false;
     }
 
-    function markHomeNavigation() {
+    function markHomeComposer() {
         const primary = document.querySelector(PRIMARY_COLUMN);
-        if (!primary) {
-            return;
-        }
-        primary.querySelectorAll('[role="tablist"], [data-testid="TopNavBar"]').forEach(function (navigation) {
-            if (processedHomeNavigation.has(navigation) ||
-                navigation.closest('article, [role="dialog"], [aria-modal="true"]')) {
-                return;
-            }
-            processedHomeNavigation.add(navigation);
-            navigation.classList.add(HOME_NAVIGATION_CLASS);
-            let candidate = navigation.parentElement;
+        const editor = primary && primary.querySelector('[data-testid^="tweetTextarea_"]');
+        const homeTabs = primary && primary.querySelector('[role="tablist"]');
+        let safeContainer = null;
+        if (editor && !editor.closest(REPLY_OR_DIALOG_ANCESTORS)) {
+            let candidate = editor.parentElement;
             for (let depth = 0; candidate && candidate !== primary && depth < MAX_COMPOSER_ANCESTORS; depth += 1) {
-                // Hiding the sticky wrapper also reclaims its reserved height; never include content.
-                if (candidate.querySelector('article, [data-testid="tweet"], textarea, input, [contenteditable="true"]')) {
-                    return;
+                // The composer has its own attachment tabs. Protect the first home
+                // timeline tabs without treating those inner controls as a boundary.
+                if ((homeTabs && candidate.contains(homeTabs)) ||
+                    candidate.matches(COMPOSER_BOUNDARIES) || candidate.querySelector(COMPOSER_BOUNDARIES)) {
+                    break;
                 }
-                if (getComputedStyle(candidate).position === "sticky") {
-                    candidate.classList.add(HOME_NAVIGATION_CLASS);
-                    return;
+                if (candidate.querySelector(COMPOSER_BUTTONS)) {
+                    safeContainer = candidate;
                 }
                 candidate = candidate.parentElement;
             }
+        }
+        if (markedComposer && markedComposer !== safeContainer) {
+            markedComposer.classList.remove(COMPOSER_CLASS);
+        }
+        markedComposer = safeContainer;
+        if (markedComposer) {
+            markedComposer.classList.add(COMPOSER_CLASS);
+        }
+    }
+
+    function markContentWrappers() {
+        const primary = document.querySelector(PRIMARY_COLUMN);
+        const nextWrappers = [];
+        let candidate = primary && primary.parentElement;
+        for (let depth = 0; candidate && depth < MAX_LAYOUT_ANCESTORS; depth += 1) {
+            if (candidate.matches('main, [role="main"]')) {
+                break;
+            }
+            if (candidate.tagName !== "DIV" || candidate.matches('[data-testid="cellInnerDiv"], [data-testid="virtualScroller"], [role="region"], [role="list"]')) {
+                break;
+            }
+            candidate.classList.add(LAYOUT_CLASS);
+            nextWrappers.push(candidate);
+            candidate = candidate.parentElement;
+        }
+        layoutWrappers.forEach(function (wrapper) {
+            if (!nextWrappers.includes(wrapper)) {
+                wrapper.classList.remove(LAYOUT_CLASS);
+            }
         });
+        layoutWrappers = nextWrappers;
     }
 
     function refresh() {
@@ -142,12 +163,20 @@
             return;
         }
         const active = contentMode && isAuthenticatedPage();
+        const modalOpen = hasVisibleModal();
         const isHome = location.pathname === "/home" || (isLocalFixture && location.pathname === "blank");
         root.classList.toggle(CONTENT_CLASS, active);
         root.classList.toggle(HOME_CLASS, active && isHome);
+        root.classList.toggle(DOCUMENT_SCROLL_CLASS, active && document.scrollingElement === root);
+        root.classList.toggle(MODAL_CLASS, active && modalOpen);
+        if (active) {
+            markContentWrappers();
+        }
         if (active && isHome) {
             markHomeComposer();
-            markHomeNavigation();
+        } else if (markedComposer) {
+            markedComposer.classList.remove(COMPOSER_CLASS);
+            markedComposer = null;
         }
 
         if (scanAllVideos) {

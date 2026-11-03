@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none">
+  <title>TinyX</title>
+  <desc>A compact navy window with a white geometric X and a mint lower-left corner.</desc>
+  <rect x="12" y="20" width="232" height="216" rx="40" fill="#101C2E" stroke="#ADBED0" stroke-width="8"/>
+  <path d="M84 64H110L180 168H154Z" fill="#F8FAFC"/>
+  <path d="M154 64H180L110 168H84Z" fill="#F8FAFC"/>
+  <path d="M48 152V200H96" stroke="#5EEAD4" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

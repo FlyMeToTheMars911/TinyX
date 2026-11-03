@@ -6,13 +6,13 @@ internal static class AppLog
     private static readonly object Sync = new();
     private static string? _path;
 
-    public static void Initialize(bool smoke)
+    public static void Initialize(bool smoke, bool inspection = false)
     {
         try
         {
             string directory = Path.Combine(AppSettings.DataDirectory, "logs");
             Directory.CreateDirectory(directory);
-            _path = Path.Combine(directory, smoke ? "smoke.log" : "tinyx.log");
+            _path = Path.Combine(directory, inspection ? "inspection.log" : smoke ? "smoke.log" : "tinyx.log");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

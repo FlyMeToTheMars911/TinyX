@@ -3,18 +3,25 @@ namespace TinyX;
 internal static class SmokeFixture
 {
     public const string Html = """
-        <!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+        <!doctype html><html style="height:100%;overflow-y:auto"><head><meta name="viewport" content="width=device-width, initial-scale=1">
         <title>TinyX local fixture</title><style>
         body { background: #000; color: #e7e9ea; font: 15px sans-serif; }
         main > div { display: flex; }
-        article { padding: 24px 12px; border-bottom: 1px solid #333; }
-        </style></head><body>
+        article { box-sizing: border-box; min-height: 420px; padding: 24px 12px; border-bottom: 1px solid #333; }
+        [role="tablist"] { height: 48px; display: flex; }
+        [role="tab"] { flex: 1; }
+        </style></head><body style="overflow-x:hidden">
         <div id="react-root"><div><div>
         <header role="banner"><nav><button data-testid="SideNav_AccountSwitcher_Button">Fixture account</button></nav></header>
         <main role="main"><div><div data-testid="primaryColumn" style="width:600px;min-width:600px">
+        <div id="fixture-home-tabs"><div role="tablist"><button role="tab" aria-selected="true">For you</button><button role="tab">Following</button></div></div>
+        <div id="fixture-home-composer"><div><div><div data-testid="tweetTextarea_0" role="textbox" contenteditable="true"></div></div>
+        <div data-testid="toolBar"><button data-testid="attachments">Fixture attachment</button><div><button data-testid="tweetButton">Post</button></div></div></div></div>
         <div aria-label="Home timeline"><section role="region"><div aria-label="Timeline: Your Home Timeline">
-        <article data-testid="tweet"><div data-testid="tweetText">Offline fixture one.</div></article>
-        <article data-testid="tweet"><div data-testid="tweetText">Offline fixture two.</div></article>
+        <div data-testid="virtualizedList" style="height:3200px;position:relative">
+        <div data-testid="cellInnerDiv" id="fixture-cell-one" style="position:absolute;width:100%;height:500px;transform:translateY(0px)"><article data-testid="tweet"><div data-testid="tweetText">Offline fixture one.</div></article></div>
+        <div data-testid="cellInnerDiv" id="fixture-cell-two" style="position:absolute;width:100%;height:500px;transform:translateY(700px)"><article data-testid="tweet"><div data-testid="tweetText">Offline fixture two.</div></article></div>
+        </div>
         </div></section></div></div><div data-testid="sidebarColumn" style="width:300px">Fixture recommendations</div></div></main>
         </div></div></div></body></html>
         """;
@@ -30,13 +37,31 @@ internal static class SmokeFixture
             hasLoginForm: !!document.querySelector('input[autocomplete="username"],input[type="password"],input[name="text"]'),
             hasLoginLink: !!document.querySelector('a[href="/login"],a[href="/i/flow/login"]'),
             navigationVisible: (() => { const el = document.querySelector('header[role="banner"]');
-                return !!el && getComputedStyle(el).display !== 'none'; })(),
+                return !!el && getComputedStyle(el).display !== 'none' && getComputedStyle(el).visibility !== 'hidden' && el.getBoundingClientRect().width > 0; })(),
             sidebarVisible: (() => { const el = document.querySelector('[data-testid="sidebarColumn"]');
                 return !!el && getComputedStyle(el).display !== 'none'; })(),
             tweetVisible: (() => { const el = document.querySelector('[data-testid="tweet"]');
                 return !!el && el.getBoundingClientRect().width > 0 && getComputedStyle(el).display !== 'none'; })(),
             primaryWidth: document.querySelector('[data-testid="primaryColumn"]')?.getBoundingClientRect().width || 0,
             viewportWidth: innerWidth,
+            homeTabsVisible: (() => { const el = document.querySelector('[role="tablist"]');
+                return !!el && el.getBoundingClientRect().height > 0 && getComputedStyle(el).display !== 'none'; })(),
+            homeComposerHidden: (() => { const el = document.querySelector('#fixture-home-composer');
+                return !!el && el.getBoundingClientRect().height === 0; })(),
+            documentScrollMode: document.documentElement.classList.contains('tinyx-document-scroll'),
+            bodyOverflowY: getComputedStyle(document.body).overflowY,
+            nestedVerticalScrollers: Array.from(document.querySelectorAll('body,main,section,div')).filter(el => {
+                const style = getComputedStyle(el);
+                return /^(auto|scroll)$/.test(style.overflowY) && el.clientHeight > 0 && el.scrollHeight > el.clientHeight + 1;
+            }).length,
+            virtualCellHeight: (() => { const el = document.querySelector('#fixture-cell-two');
+                return el ? getComputedStyle(el).height : null; })(),
+            virtualCellTransform: (() => { const el = document.querySelector('#fixture-cell-two');
+                return el ? getComputedStyle(el).transform : null; })(),
+            visibleTweetCount: Array.from(document.querySelectorAll('[data-testid="tweet"]')).filter(el => {
+                const rect = el.getBoundingClientRect(); return rect.width > 0 && rect.bottom > 0 && rect.top < innerHeight;
+            }).length,
+            scrollTop: document.scrollingElement?.scrollTop || 0,
             horizontalOverflow: document.documentElement.scrollWidth > innerWidth + 1
         }))()
         """;

@@ -21,10 +21,13 @@ Windows 左下角的 X（Twitter）小窗。C# / WinForms / Microsoft Edge WebVi
 
 ## 纯内容模式
 
-- 隐藏 X 的左右侧栏、推荐趋势、底部导航和消息 / Grok 浮层，时间线铺满小窗。
+- 时间线铺满小窗；精简模式隐藏左右侧栏，不显示悬停触发条或导航浮层。
+- 保留顶部“为你推荐 / 正在关注 / 列表”等原生标签，隐藏首页发帖区域、右侧推荐趋势、底部导航和消息 / Grok 浮层。
 - 保留推文作者、正文、图片、手动视频播放、互动按钮、详情与弹窗。
 - 仅在识别到已登录的 X 主页面时启用，登录、验证码等认证页面保留原布局。
 - 关闭纯内容模式可恢复网页导航。X 网页结构变化时，可能需要更新 `src/TinyX/Assets/content.css` 和 `content.js`。
+
+应用和系统托盘使用同一套 TinyX 图标，包含 16–256 像素的八种尺寸。矢量源文件为 `src/TinyX/Assets/TinyX.svg`，可用 `scripts/generate-icon.ps1` 重生成 ICO。
 
 ## 资源占用
 
@@ -66,5 +69,14 @@ GitHub Actions 在推送和 PR 时运行脚本回归检查并打包；推送 `v*
 ```
 
 实际 X 页面测试需要可用网络与 TinyX 中的登录态。仅有 Chrome 已登录不足以证明 WebView2 内的登录已通过。测试过程不发推、不点赞、不关注，不修改账号设置。
+
+托盘菜单可导出布局诊断。诊断只收集滚动位置、尺寸、固定 DOM 标记和进程内存，不收集正文、Cookie 或输入内容，文件存于 `%LOCALAPPDATA%\TinyX\diagnostics-current.json`。运行中的新版程序也支持：
+
+```powershell
+.\TinyX.exe --diagnostics-existing
+.\TinyX.exe --exit-existing
+```
+
+开发者可用 `--inspect-profile --diagnostics ./work/layout.json` 检查已登录会话：它创建独立、透明且不抢焦点的诊断窗口，共用 TinyX 登录目录，仅在该诊断窗口内读取布局和测试滚动，结束后自动退出。诊断文件留在本地。0.2.0 的逐项验证见 [页面优化与验证](docs/0.2.0-页面优化与验证.md)。
 
 TinyX 是独立开源工具，与 X Corp 无关联。X 的网站与第三方组件由其各自条款约束，项目源码使用 MIT 许可。

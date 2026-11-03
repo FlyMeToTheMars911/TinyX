@@ -27,6 +27,7 @@ internal sealed class MainForm : Form
         ForeColor = Color.Gainsboro
     };
     private readonly NotifyIcon _tray;
+    private readonly Icon _applicationIcon;
     private readonly ToolStripMenuItem _topMenu;
     private readonly ToolStripMenuItem _contentMenu;
     private readonly SemaphoreSlim _visibilityGate = new(1, 1);
@@ -43,7 +44,9 @@ internal sealed class MainForm : Form
     public MainForm(LaunchOptions options)
     {
         _options = options;
-        _settings = options.IsSmokeTest ? new AppSettings() : AppSettings.Load();
+        _settings = options.IsTransient ? new AppSettings() : AppSettings.Load();
+        _applicationIcon = LoadApplicationIcon();
+        Icon = _applicationIcon;
         Text = "TinyX";
         Name = "TinyX";
         FormBorderStyle = FormBorderStyle.None;
@@ -57,7 +60,8 @@ internal sealed class MainForm : Form
             Math.Min(_settings.Height, initialWorkArea.Height));
         MinimumSize = new Size(AppSettings.MinimumWidth, AppSettings.MinimumHeight);
         ShowInTaskbar = false;
-        TopMost = _settings.AlwaysOnTop;
+        TopMost = !options.InspectProfile && _settings.AlwaysOnTop;
+        if (options.InspectProfile) Opacity = 0;
         Controls.Add(_web);
         Controls.Add(_status);
         _status.BringToFront();
@@ -91,14 +95,15 @@ internal sealed class MainForm : Form
         menu.Items.Add("回到首页", null, (_, _) => NavigateHome());
         menu.Items.Add("在浏览器中打开 X", null, (_, _) => OpenExternal(HomeUrl));
         menu.Items.Add("操作说明", null, (_, _) => ShowHelp());
+        menu.Items.Add("导出布局诊断（不含推文正文）", null, async (_, _) => await ExportCurrentDiagnosticsAsync());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("退出 TinyX", null, (_, _) => ExitApplication());
         _tray = new NotifyIcon
         {
-            Icon = SystemIcons.Application,
+            Icon = _applicationIcon,
             Text = "TinyX · Ctrl+Alt+X 显示 / 隐藏",
             ContextMenuStrip = menu,
-            Visible = true
+            Visible = !options.InspectProfile
         };
         _tray.DoubleClick += (_, _) => ShowWindow();
         Shown += async (_, _) =>
@@ -118,9 +123,12 @@ internal sealed class MainForm : Form
         }
     }
 
+    protected override bool ShowWithoutActivation => _options?.InspectProfile == true || base.ShowWithoutActivation;
+
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
+        if (_options.InspectProfile) return;
         _hotkeyRegistered = NativeMethods.RegisterHotKey(Handle, NativeMethods.HotkeyId,
             NativeMethods.HotkeyModifiers, NativeMethods.HideKey);
         AppLog.Info("hotkey-registration", "success=" + _hotkeyRegistered);
@@ -296,7 +304,7 @@ internal sealed class MainForm : Form
             AppLog.Error("webview-initialization-failed", ex);
             _status.Text = "TinyX 无法初始化网页组件。\n请确认已安装 Microsoft Edge WebView2 Runtime。\n右键托盘图标可退出；详细信息见本地日志。";
             _status.BringToFront();
-            if (_options.IsSmokeTest)
+            if (_options.IsTransient)
                 await WriteFailureAndExitAsync("initialization-failed", ex);
         }
     }
@@ -343,6 +351,18 @@ internal sealed class MainForm : Form
             ?? throw new InvalidOperationException("Missing embedded content resource: " + name);
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
+    }
+
+    private static Icon LoadApplicationIcon()
+    {
+        using Stream? stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("TinyX.Assets.TinyX.ico");
+        if (stream is null)
+        {
+            AppLog.Info("application-icon-fallback");
+            return (Icon)SystemIcons.Application.Clone();
+        }
+        using var resource = new Icon(stream);
+        return (Icon)resource.Clone();
     }
 
     private async Task ExecuteContentCommandAsync(string command, bool value)
@@ -442,7 +462,12 @@ internal sealed class MainForm : Form
     {
         AppLog.Info("navigation-completed", "success=" + e.IsSuccess + ";status=" + e.WebErrorStatus);
         _status.Visible = false;
-        if (_options.IsSmokeTest && !_smokeStarted)
+        if (_options.InspectProfile && !_smokeStarted)
+        {
+            _smokeStarted = true;
+            await RunProfileInspectionAsync(e.IsSuccess);
+        }
+        else if (_options.IsSmokeTest && !_smokeStarted)
         {
             _smokeStarted = true;
             await RunSmokeTestAsync(e.IsSuccess);
@@ -525,7 +550,7 @@ internal sealed class MainForm : Form
 
     private void PersistSettings()
     {
-        if (_options.IsSmokeTest) return;
+        if (_options.IsTransient) return;
         RememberWindowBounds();
         _settings.Save();
     }
@@ -563,6 +588,7 @@ internal sealed class MainForm : Form
             bool? contentChecks = null;
             JsonElement? fullPageState = null;
             JsonElement? authenticationPageState = null;
+            JsonElement? scrolledPageState = null;
             if (_options.LocalFixture)
             {
                 using JsonDocument compact = JsonDocument.Parse(pageState);
@@ -572,7 +598,24 @@ internal sealed class MainForm : Form
                     !state.GetProperty("navigationVisible").GetBoolean() &&
                     !state.GetProperty("sidebarVisible").GetBoolean() &&
                     state.GetProperty("tweetVisible").GetBoolean() &&
+                    state.GetProperty("homeTabsVisible").GetBoolean() &&
+                    state.GetProperty("homeComposerHidden").GetBoolean() &&
+                    state.GetProperty("documentScrollMode").GetBoolean() &&
+                    state.GetProperty("nestedVerticalScrollers").GetInt32() == 0 &&
+                    state.GetProperty("bodyOverflowY").GetString() == "visible" &&
+                    state.GetProperty("virtualCellHeight").GetString() == "500px" &&
+                    state.GetProperty("virtualCellTransform").GetString() == "matrix(1, 0, 0, 1, 0, 700)" &&
                     !state.GetProperty("horizontalOverflow").GetBoolean();
+                await _web.ExecuteScriptAsync("window.scrollTo(0, 680)");
+                await Task.Delay(200);
+                using JsonDocument scrolled = JsonDocument.Parse(await _web.ExecuteScriptAsync(SmokeFixture.DiagnosticsScript));
+                scrolledPageState = scrolled.RootElement.Clone();
+                bool scrollPassed = scrolled.RootElement.GetProperty("scrollTop").GetDouble() > 0 &&
+                    scrolled.RootElement.GetProperty("visibleTweetCount").GetInt32() > 0 &&
+                    scrolled.RootElement.GetProperty("nestedVerticalScrollers").GetInt32() == 0 &&
+                    scrolled.RootElement.GetProperty("virtualCellHeight").GetString() == "500px" &&
+                    scrolled.RootElement.GetProperty("virtualCellTransform").GetString() == "matrix(1, 0, 0, 1, 0, 700)";
+                await _web.ExecuteScriptAsync("window.scrollTo(0, 0)");
                 await ExecuteContentCommandAsync("setContentMode", false);
                 await Task.Delay(200);
                 using JsonDocument full = JsonDocument.Parse(await _web.ExecuteScriptAsync(SmokeFixture.DiagnosticsScript));
@@ -590,7 +633,7 @@ internal sealed class MainForm : Form
                     auth.RootElement.GetProperty("hasLoginForm").GetBoolean();
                 await _web.ExecuteScriptAsync("document.getElementById('tinyx-smoke-login')?.remove()");
                 await Task.Delay(200);
-                contentChecks = compactPassed && fullPassed && authPassed;
+                contentChecks = compactPassed && scrollPassed && fullPassed && authPassed;
             }
             NativeMethods.SendMessage(Handle, NativeMethods.HotkeyMessage,
                 (IntPtr)NativeMethods.HotkeyId, IntPtr.Zero);
@@ -638,6 +681,7 @@ internal sealed class MainForm : Form
                 Page = pageDocument.RootElement.Clone(),
                 FullPageMode = fullPageState,
                 AuthenticationPage = authenticationPageState,
+                ScrolledPage = scrolledPageState,
                 MemoryBefore = before,
                 MemoryHidden = hiddenMemory,
                 MemoryRestored = CaptureMemorySnapshot(),
@@ -651,6 +695,139 @@ internal sealed class MainForm : Form
         {
             await WriteFailureAndExitAsync("smoke-test-failed", ex);
         }
+    }
+
+    public async Task ExportCurrentDiagnosticsAsync()
+    {
+        try
+        {
+            object report = _web.CoreWebView2 is null
+                ? new { Ready = false }
+                : new { Ready = true, CapturedAtUtc = DateTimeOffset.UtcNow,
+                    BrowserVersion = _environment?.BrowserVersionString,
+                    Page = await CaptureLayoutDiagnosticsAsync() };
+            Directory.CreateDirectory(AppSettings.DataDirectory);
+            await File.WriteAllTextAsync(PageDiagnostics.DefaultPath, JsonSerializer.Serialize(report,
+                new JsonSerializerOptions { WriteIndented = true }));
+            AppLog.Info("layout-diagnostics-exported");
+            if (!_options.InspectProfile)
+                _tray.ShowBalloonTip(5000, "TinyX 布局诊断已导出",
+                    "已保存至 %LOCALAPPDATA%\\TinyX\\diagnostics-current.json，不包含推文正文或登录凭据。",
+                    ToolTipIcon.Info);
+        }
+        catch (Exception ex) { AppLog.Error("layout-diagnostics-export-failed", ex); }
+    }
+
+    public void RequestExit() => ExitApplication();
+
+    private async Task<JsonElement> CaptureLayoutDiagnosticsAsync()
+    {
+        string json = await _web.ExecuteScriptAsync(PageDiagnostics.Script).WaitAsync(TimeSpan.FromSeconds(8));
+        using JsonDocument document = JsonDocument.Parse(json);
+        return document.RootElement.Clone();
+    }
+
+    private async Task<JsonElement> CaptureViewSampleAsync()
+    {
+        string json = await _web.ExecuteScriptAsync(PageDiagnostics.ViewSampleScript).WaitAsync(TimeSpan.FromSeconds(4));
+        using JsonDocument document = JsonDocument.Parse(json);
+        return document.RootElement.Clone();
+    }
+
+    private Task DispatchInspectionMouseAsync(string type, double x, double y, double? deltaY = null)
+    {
+        var parameters = new Dictionary<string, object> { ["type"] = type, ["x"] = x, ["y"] = y };
+        if (deltaY.HasValue)
+        {
+            parameters["deltaX"] = 0;
+            parameters["deltaY"] = deltaY.Value;
+        }
+        return _web.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",
+            JsonSerializer.Serialize(parameters)).WaitAsync(TimeSpan.FromSeconds(4));
+    }
+
+    private async Task RunProfileInspectionAsync(bool navigationSucceeded)
+    {
+        try
+        {
+            await Task.Delay(2500);
+            for (int attempt = 0; attempt < 12; attempt++)
+            {
+                string ready = await _web.ExecuteScriptAsync(PageDiagnostics.ReadyScript).WaitAsync(ScriptTimeout);
+                if (ready == "true") break;
+                await Task.Delay(750);
+            }
+            await Task.Delay(1000);
+            JsonElement initial = await CaptureLayoutDiagnosticsAsync();
+            await ExecuteContentCommandAsync("setContentMode", false);
+            await Task.Delay(250);
+            JsonElement full = await CaptureLayoutDiagnosticsAsync();
+            await ExecuteContentCommandAsync("setContentMode", true);
+            await Task.Delay(250);
+            JsonElement compact = await CaptureLayoutDiagnosticsAsync();
+            var scrollSamples = new List<JsonElement> { await CaptureViewSampleAsync() };
+            string? scrollError = null;
+            try
+            {
+                const int sampleCount = 10;
+                for (int step = 0; step < sampleCount; step++)
+                {
+                    await _web.ExecuteScriptAsync("window.scrollBy(0, Math.round(innerHeight * 0.8))")
+                        .WaitAsync(TimeSpan.FromSeconds(4));
+                    await Task.Delay(300);
+                    scrollSamples.Add(await CaptureViewSampleAsync());
+                }
+            }
+            catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or COMException)
+            {
+                scrollError = ex.GetType().Name;
+                AppLog.Error("profile-inspection-scroll-failed", ex);
+            }
+            await _web.ExecuteScriptAsync("window.scrollTo(0, 0)").WaitAsync(TimeSpan.FromSeconds(4));
+            await Task.Delay(250);
+            var wheelSamples = new List<JsonElement> { await CaptureViewSampleAsync() };
+            string? wheelError = null;
+            try
+            {
+                const int wheelSampleCount = 10;
+                for (int step = 0; step < wheelSampleCount; step++)
+                {
+                    JsonElement sample = wheelSamples[^1];
+                    double width = sample.GetProperty("viewportWidth").GetDouble();
+                    double height = sample.GetProperty("viewportHeight").GetDouble();
+                    await DispatchInspectionMouseAsync("mouseWheel", width / 2, height / 2,
+                        Math.Round(height * 0.8));
+                    await Task.Delay(300);
+                    wheelSamples.Add(await CaptureViewSampleAsync());
+                }
+            }
+            catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or COMException)
+            {
+                wheelError = ex.GetType().Name + ";hresult=" + ex.HResult.ToString("X8");
+                AppLog.Error("profile-inspection-wheel-failed", ex);
+            }
+            await _web.ExecuteScriptAsync("window.scrollTo(0, 0)").WaitAsync(TimeSpan.FromSeconds(4));
+            await Task.Delay(250);
+            JsonElement afterScroll = await CaptureViewSampleAsync();
+            await WriteDiagnosticsAsync(new
+            {
+                Passed = navigationSucceeded,
+                Inspection = true,
+                CapturedAtUtc = DateTimeOffset.UtcNow,
+                BrowserVersion = _environment?.BrowserVersionString,
+                Initial = initial,
+                FullPageMode = full,
+                ContentMode = compact,
+                ScrollSamples = scrollSamples,
+                ScrollError = scrollError,
+                WheelSamples = wheelSamples,
+                WheelError = wheelError,
+                AfterScroll = afterScroll
+            });
+            Environment.ExitCode = navigationSucceeded ? 0 : 1;
+            ExitApplication();
+        }
+        catch (Exception ex) { await WriteFailureAndExitAsync("profile-inspection-failed", ex); }
     }
 
     private int ReadNativeHitTest(Point clientPoint)
@@ -739,5 +916,6 @@ internal sealed class MainForm : Form
             _web.Dispose();
         }
         base.Dispose(disposing);
+        if (disposing) _applicationIcon.Dispose();
     }
 }

@@ -7,9 +7,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets/TinyX.ico</ApplicationIcon>
     <AssemblyName>TinyX</AssemblyName>
     <RootNamespace>TinyX</RootNamespace>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Company>TinyX contributors</Company>
     <Description>A small, borderless X timeline window for Windows.</Description>
     <PublishTrimmed>false</PublishTrimmed>
@@ -22,6 +23,7 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
     <EmbeddedResource Include="Assets/content.css" LogicalName="TinyX.Assets.content.css" />
     <EmbeddedResource Include="Assets/content.js" LogicalName="TinyX.Assets.content.js" />
+    <EmbeddedResource Include="Assets/TinyX.ico" LogicalName="TinyX.Assets.TinyX.ico" />
   </ItemGroup>
   <!-- WebView2 imports both desktop wrappers; this app only uses WinForms. -->
   <Target Name="RemoveUnusedWebView2WpfReference" BeforeTargets="ResolveAssemblyReferences">
