@@ -8,13 +8,13 @@ internal static class SmokeFixture
         body { background: #000; color: #e7e9ea; font: 15px sans-serif; }
         main > div { display: flex; }
         article { box-sizing: border-box; min-height: 420px; padding: 24px 12px; border-bottom: 1px solid #333; }
-        [role="tablist"] { height: 48px; display: flex; }
+        [role="tablist"] { height: 53px; display: flex; }
         [role="tab"] { flex: 1; }
         </style></head><body style="overflow-x:hidden">
         <div id="react-root"><div><div>
         <header role="banner"><nav><button data-testid="SideNav_AccountSwitcher_Button">Fixture account</button></nav></header>
         <main role="main"><div><div data-testid="primaryColumn" style="width:600px;min-width:600px">
-        <div id="fixture-home-tabs"><div role="tablist"><button role="tab" aria-selected="true">For you</button><button role="tab">Following</button></div></div>
+        <div id="fixture-home-tabs" style="position:sticky;top:0;z-index:3"><div role="tablist"><button role="tab" aria-selected="true">For you</button><button role="tab">Following</button></div></div>
         <div id="fixture-home-composer"><div><div><div data-testid="tweetTextarea_0" role="textbox" contenteditable="true"></div></div>
         <div data-testid="toolBar"><button data-testid="attachments">Fixture attachment</button><div><button data-testid="tweetButton">Post</button></div></div></div></div>
         <div aria-label="Home timeline"><section role="region"><div aria-label="Timeline: Your Home Timeline">
@@ -46,6 +46,15 @@ internal static class SmokeFixture
             viewportWidth: innerWidth,
             homeTabsVisible: (() => { const el = document.querySelector('[role="tablist"]');
                 return !!el && el.getBoundingClientRect().height > 0 && getComputedStyle(el).display !== 'none'; })(),
+            homeTabsInViewport: (() => { const el = document.querySelector('[role="tablist"]');
+                const VIEWPORT_START = 0;
+                if (!el) return false; const rect = el.getBoundingClientRect();
+                return rect.height > VIEWPORT_START && rect.bottom > VIEWPORT_START && rect.top < innerHeight; })(),
+            homeTabsTop: document.querySelector('[role="tablist"]')?.getBoundingClientRect().top || 0,
+            homeTabsBottom: document.querySelector('[role="tablist"]')?.getBoundingClientRect().bottom || 0,
+            homeTabsAtViewportTop: (() => { const el = document.querySelector('[role="tablist"]');
+                const VIEWPORT_CENTER_DIVISOR = 2, VIEWPORT_PROBE_Y = 2;
+                return !!el && el.contains(document.elementFromPoint(innerWidth / VIEWPORT_CENTER_DIVISOR, VIEWPORT_PROBE_Y)); })(),
             homeComposerHidden: (() => { const el = document.querySelector('#fixture-home-composer');
                 return !!el && el.getBoundingClientRect().height === 0; })(),
             documentScrollMode: document.documentElement.classList.contains('tinyx-document-scroll'),

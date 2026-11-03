@@ -422,3 +422,82 @@ test("compact mode hides the native header without adding navigation controls an
     assert(!page.classes.has("tinyx-content-mode"), "authentication also retains the complete native layout");
     assert.equal(page.document.body.children.length, 0);
 });
+
+test("home timeline tabs scroll with their independent header and marker cleanup follows DOM, mode and route changes", () => {
+    const page = createPage();
+    const tabs = makeElement();
+    const stickyHeader = makeElement();
+    const outerStickyHeader = makeElement();
+    const sharedTimeline = makeElement();
+    tabs.parentElement = stickyHeader;
+    tabs.horizontalOverflow = "auto";
+    stickyHeader.position = "sticky";
+    stickyHeader.parentElement = outerStickyHeader;
+    outerStickyHeader.position = "sticky";
+    outerStickyHeader.parentElement = sharedTimeline;
+    sharedTimeline.position = "sticky";
+    sharedTimeline.parentElement = page.primary;
+    sharedTimeline.querySelector = selector => selector.includes("virtualScroller") ? {} : null;
+    page.state.homeTabs = tabs;
+    page.execute();
+    assert(stickyHeader.classes.has("tinyx-home-header"));
+    assert(outerStickyHeader.classes.has("tinyx-home-header"), "nested sticky wrappers must not hold the tabs in the viewport");
+    assert(!tabs.classes.has("tinyx-home-header"), "the native tabs themselves retain their original layout");
+    assert(!sharedTimeline.classes.has("tinyx-home-header"), "never restyle a wrapper that also owns the virtual timeline");
+    assert.equal(tabs.horizontalOverflow, "auto");
+    assert.equal(page.listenerCount("scroll"), 0, "no global scrolling work is required");
+
+    stickyHeader.position = "relative"; // Computed position after the compact-mode CSS takes effect.
+    outerStickyHeader.position = "relative";
+    page.mutate();
+    page.flush();
+    assert(stickyHeader.classes.has("tinyx-home-header"), "an existing marker stays stable after its own CSS changes computed position");
+
+    const replacementTabs = makeElement();
+    const replacementHeader = makeElement();
+    replacementTabs.parentElement = replacementHeader;
+    replacementHeader.position = "sticky";
+    replacementHeader.parentElement = page.primary;
+    page.state.homeTabs = replacementTabs;
+    page.mutate();
+    page.flush();
+    assert(!stickyHeader.classes.has("tinyx-home-header"), "replaced headers lose the old marker");
+    assert(!outerStickyHeader.classes.has("tinyx-home-header"));
+    assert(replacementHeader.classes.has("tinyx-home-header"));
+    page.window.__tinyX.setContentMode(false);
+    page.flush();
+    assert(!replacementHeader.classes.has("tinyx-home-header"));
+    page.window.__tinyX.setContentMode(true);
+    page.flush();
+    assert(replacementHeader.classes.has("tinyx-home-header"));
+    page.history.pushState(null, "", "/explore");
+    page.flush();
+    assert(!replacementHeader.classes.has("tinyx-home-header"), "non-home navigation retains native header behaviour");
+});
+
+test("reply, composer and dialog tabs never receive the home-header scrolling marker", () => {
+    for (const ancestorSelector of ["article", ".tinyx-home-composer", '[role="dialog"]']) {
+        const page = createPage();
+        const tabs = makeElement();
+        const stickyHeader = makeElement();
+        tabs.closest = selector => selector.includes(ancestorSelector) ? {} : null;
+        tabs.parentElement = stickyHeader;
+        stickyHeader.position = "sticky";
+        stickyHeader.parentElement = page.primary;
+        page.state.homeTabs = tabs;
+        page.execute();
+        assert(!stickyHeader.classes.has("tinyx-home-header"), ancestorSelector);
+    }
+});
+
+test("an unverified fixed-header layout is not moved into document flow", () => {
+    const page = createPage();
+    const tabs = makeElement();
+    const fixedHeader = makeElement();
+    tabs.parentElement = fixedHeader;
+    fixedHeader.position = "fixed";
+    fixedHeader.parentElement = page.primary;
+    page.state.homeTabs = tabs;
+    page.execute();
+    assert(!fixedHeader.classes.has("tinyx-home-header"), "preserve unknown fixed-header placeholders and measured timeline offsets");
+});

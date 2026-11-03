@@ -10,7 +10,7 @@
     <ApplicationIcon>Assets/TinyX.ico</ApplicationIcon>
     <AssemblyName>TinyX</AssemblyName>
     <RootNamespace>TinyX</RootNamespace>
-    <Version>0.2.0</Version>
+    <Version>0.2.1</Version>
     <Company>TinyX contributors</Company>
     <Description>A small, borderless X timeline window for Windows.</Description>
     <PublishTrimmed>false</PublishTrimmed>

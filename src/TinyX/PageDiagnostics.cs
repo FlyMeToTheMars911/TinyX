@@ -142,6 +142,7 @@ internal static class PageDiagnostics
                 tweetCount:document.querySelectorAll('[data-testid="tweet"]').length,
                 scrollingElement:node(document.scrollingElement),html:node(document.documentElement),body:node(document.body),
                 primaryAncestors:ancestors(primary),tweetAncestors:ancestors(firstTweet),composerAncestors,
+                homeTabsAncestors:ancestors(primary?.querySelector('[role="tablist"]')),
                 scrollContainers,nav:selected('header[role="banner"]',8),
                 tabs:selected('[role="tablist"],[role="tab"]',12),
                 tweets:selected('[data-testid="tweet"]',24),

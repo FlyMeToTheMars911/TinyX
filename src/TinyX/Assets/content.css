@@ -56,4 +56,11 @@ html.tinyx-content-mode [data-testid="primaryColumn"] {
     border-right: 0 !important;
 }
 
+/* Keep home tabs in normal document flow so they scroll away with the page. */
+html.tinyx-content-mode.tinyx-route-home .tinyx-home-header {
+    position: relative !important;
+    top: auto !important;
+    bottom: auto !important;
+}
+
 /* Native home tabs, tweet text, media, actions and detail/dialog styles remain. */

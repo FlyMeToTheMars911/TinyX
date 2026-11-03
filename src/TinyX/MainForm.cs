@@ -13,6 +13,7 @@ internal sealed class MainForm : Form
     private const int LogicalDpi = 96;
     private const int BorderSize = 4;
     private const int WindowMargin = 12;
+    private const double DocumentScrollOrigin = 0;
     private static readonly TimeSpan ScriptTimeout = TimeSpan.FromMilliseconds(750);
     private static readonly TimeSpan SuspendTimeout = TimeSpan.FromSeconds(2);
     private readonly LaunchOptions _options;
@@ -589,6 +590,7 @@ internal sealed class MainForm : Form
             JsonElement? fullPageState = null;
             JsonElement? authenticationPageState = null;
             JsonElement? scrolledPageState = null;
+            JsonElement? returnedTopPageState = null;
             if (_options.LocalFixture)
             {
                 using JsonDocument compact = JsonDocument.Parse(pageState);
@@ -599,6 +601,7 @@ internal sealed class MainForm : Form
                     !state.GetProperty("sidebarVisible").GetBoolean() &&
                     state.GetProperty("tweetVisible").GetBoolean() &&
                     state.GetProperty("homeTabsVisible").GetBoolean() &&
+                    state.GetProperty("homeTabsInViewport").GetBoolean() &&
                     state.GetProperty("homeComposerHidden").GetBoolean() &&
                     state.GetProperty("documentScrollMode").GetBoolean() &&
                     state.GetProperty("nestedVerticalScrollers").GetInt32() == 0 &&
@@ -611,11 +614,21 @@ internal sealed class MainForm : Form
                 using JsonDocument scrolled = JsonDocument.Parse(await _web.ExecuteScriptAsync(SmokeFixture.DiagnosticsScript));
                 scrolledPageState = scrolled.RootElement.Clone();
                 bool scrollPassed = scrolled.RootElement.GetProperty("scrollTop").GetDouble() > 0 &&
+                    !scrolled.RootElement.GetProperty("homeTabsInViewport").GetBoolean() &&
+                    scrolled.RootElement.GetProperty("homeTabsBottom").GetDouble() <= DocumentScrollOrigin &&
+                    !scrolled.RootElement.GetProperty("homeTabsAtViewportTop").GetBoolean() &&
                     scrolled.RootElement.GetProperty("visibleTweetCount").GetInt32() > 0 &&
                     scrolled.RootElement.GetProperty("nestedVerticalScrollers").GetInt32() == 0 &&
                     scrolled.RootElement.GetProperty("virtualCellHeight").GetString() == "500px" &&
                     scrolled.RootElement.GetProperty("virtualCellTransform").GetString() == "matrix(1, 0, 0, 1, 0, 700)";
                 await _web.ExecuteScriptAsync("window.scrollTo(0, 0)");
+                await Task.Delay(200);
+                using JsonDocument returnedTop = JsonDocument.Parse(await _web.ExecuteScriptAsync(SmokeFixture.DiagnosticsScript));
+                returnedTopPageState = returnedTop.RootElement.Clone();
+                bool returnedTopPassed = returnedTop.RootElement.GetProperty("homeTabsVisible").GetBoolean() &&
+                    returnedTop.RootElement.GetProperty("homeTabsInViewport").GetBoolean() &&
+                    returnedTop.RootElement.GetProperty("homeTabsTop").GetDouble() >= DocumentScrollOrigin &&
+                    returnedTop.RootElement.GetProperty("scrollTop").GetDouble() == DocumentScrollOrigin;
                 await ExecuteContentCommandAsync("setContentMode", false);
                 await Task.Delay(200);
                 using JsonDocument full = JsonDocument.Parse(await _web.ExecuteScriptAsync(SmokeFixture.DiagnosticsScript));
@@ -633,7 +646,7 @@ internal sealed class MainForm : Form
                     auth.RootElement.GetProperty("hasLoginForm").GetBoolean();
                 await _web.ExecuteScriptAsync("document.getElementById('tinyx-smoke-login')?.remove()");
                 await Task.Delay(200);
-                contentChecks = compactPassed && scrollPassed && fullPassed && authPassed;
+                contentChecks = compactPassed && scrollPassed && returnedTopPassed && fullPassed && authPassed;
             }
             NativeMethods.SendMessage(Handle, NativeMethods.HotkeyMessage,
                 (IntPtr)NativeMethods.HotkeyId, IntPtr.Zero);
@@ -682,6 +695,7 @@ internal sealed class MainForm : Form
                 FullPageMode = fullPageState,
                 AuthenticationPage = authenticationPageState,
                 ScrolledPage = scrolledPageState,
+                ReturnedTopPage = returnedTopPageState,
                 MemoryBefore = before,
                 MemoryHidden = hiddenMemory,
                 MemoryRestored = CaptureMemorySnapshot(),
@@ -822,7 +836,7 @@ internal sealed class MainForm : Form
                 ScrollError = scrollError,
                 WheelSamples = wheelSamples,
                 WheelError = wheelError,
-                AfterScroll = afterScroll
+                AfterScrollTop = afterScroll
             });
             Environment.ExitCode = navigationSucceeded ? 0 : 1;
             ExitApplication();

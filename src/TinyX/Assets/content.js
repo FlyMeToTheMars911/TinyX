@@ -4,6 +4,7 @@
     const CONTENT_CLASS = "tinyx-content-mode";
     const HOME_CLASS = "tinyx-route-home";
     const COMPOSER_CLASS = "tinyx-home-composer";
+    const HOME_HEADER_CLASS = "tinyx-home-header";
     const DOCUMENT_SCROLL_CLASS = "tinyx-document-scroll";
     const MODAL_CLASS = "tinyx-modal-open";
     const LAYOUT_CLASS = "tinyx-content-row";
@@ -11,6 +12,7 @@
     const MAX_PENDING_ROOTS = 48;
     const MAX_COMPOSER_ANCESTORS = 40;
     const MAX_LAYOUT_ANCESTORS = 5;
+    const MAX_HOME_HEADER_ANCESTORS = 12;
     const ALLOWED_HOSTS = new Set(["x.com", "www.x.com", "twitter.com", "www.twitter.com"]);
     const LOGIN_MARKERS = '[data-testid="LoginForm_Login_Button"], input[autocomplete="current-password"], [role="dialog"] input[autocomplete="username"], #arkoseFrame';
     const ACCOUNT_MARKERS = '[data-testid="SideNav_AccountSwitcher_Button"], [data-testid="AppTabBar_Profile_Link"], [data-testid="SideNav_NewTweet_Button"]';
@@ -20,6 +22,7 @@
     const COMPOSER_BUTTONS = '[data-testid="tweetButtonInline"], [data-testid="tweetButton"]';
     const COMPOSER_BOUNDARIES = 'article, [data-testid="tweet"], [data-testid="cellInnerDiv"], [data-testid="virtualScroller"], [role="list"], [role="region"], section, main, [role="dialog"], [aria-modal="true"]';
     const REPLY_OR_DIALOG_ANCESTORS = 'article, [data-testid="tweet"], [data-testid="cellInnerDiv"], [data-testid="virtualScroller"], [role="dialog"], [aria-modal="true"]';
+    const HOME_HEADER_BOUNDARIES = 'article, [data-testid="tweet"], [data-testid="cellInnerDiv"], [data-testid="virtualScroller"], [data-testid="virtualizedList"], [role="region"], [role="list"], section, [data-testid^="tweetTextarea_"], [role="dialog"], [aria-modal="true"]';
     const AUTH_PATH = /^\/(?:i\/flow|login|signup|account\/access|i\/oauth2|oauth)(?:\/|$)/i;
 
     const isLocalFixture = window.__tinyXAllowLocalFixture === true && location.href === "about:blank";
@@ -42,6 +45,7 @@
     const processedVideos = new WeakSet();
     const pendingRoots = new Set();
     let markedComposer = null;
+    let markedHomeHeaders = [];
     let layoutWrappers = [];
 
     function isPageVisible() {
@@ -156,6 +160,34 @@
         layoutWrappers = nextWrappers;
     }
 
+    function updateHomeHeader(active) {
+        const nextHeaders = [];
+        const primary = active && document.querySelector(PRIMARY_COLUMN);
+        const tabs = primary && primary.querySelector('[role="tablist"]');
+        if (tabs && !tabs.closest(REPLY_OR_DIALOG_ANCESTORS + ", ." + COMPOSER_CLASS)) {
+            let candidate = tabs;
+            for (let depth = 0; candidate && candidate !== primary && depth < MAX_HOME_HEADER_ANCESTORS; depth += 1) {
+                if (candidate.matches(HOME_HEADER_BOUNDARIES) || candidate.querySelector(HOME_HEADER_BOUNDARIES)) {
+                    break;
+                }
+                const position = getComputedStyle(candidate).position;
+                // Sticky headers already occupy document space. Leave fixed
+                // layouts alone unless their separate placeholder is understood.
+                if (position === "sticky" || candidate.classList.contains(HOME_HEADER_CLASS)) {
+                    candidate.classList.add(HOME_HEADER_CLASS);
+                    nextHeaders.push(candidate);
+                }
+                candidate = candidate.parentElement;
+            }
+        }
+        markedHomeHeaders.forEach(function (header) {
+            if (!nextHeaders.includes(header)) {
+                header.classList.remove(HOME_HEADER_CLASS);
+            }
+        });
+        markedHomeHeaders = nextHeaders;
+    }
+
     function refresh() {
         refreshTimer = null;
         const root = document.documentElement;
@@ -178,6 +210,7 @@
             markedComposer.classList.remove(COMPOSER_CLASS);
             markedComposer = null;
         }
+        updateHomeHeader(active && isHome);
 
         if (scanAllVideos) {
             visitVideos(document, prepareVideo);
