@@ -1,0 +1,20 @@
+# Build products and task-local tools
+**/bin/
+**/obj/
+work/
+dist/
+outputs/
+*.user
+*.suo
+.vs/
+.idea/
+
+# Local browser state, logs and credentials must never be published
+WebView2/
+UserData/
+*.log
+*.dmp
+.env
+.env.*
+!.env.example
+node_modules/

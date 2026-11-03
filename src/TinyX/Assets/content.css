@@ -1,0 +1,54 @@
+/* The script enables these rules only on an authenticated X application page. */
+html.tinyx-content-mode,
+html.tinyx-content-mode body,
+html.tinyx-content-mode #react-root {
+    width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+}
+
+html.tinyx-content-mode body {
+    overflow-x: hidden !important;
+}
+
+html.tinyx-content-mode header[role="banner"]:not(:has([role="dialog"], [aria-modal="true"])),
+html.tinyx-content-mode [data-testid="sidebarColumn"],
+html.tinyx-content-mode [data-testid="AppTabBar"],
+html.tinyx-content-mode [data-testid="BottomNavBar"],
+html.tinyx-content-mode [data-testid="DMDrawer"],
+html.tinyx-content-mode [data-testid="GrokDrawer"],
+html.tinyx-content-mode [data-testid="BottomBar"],
+html.tinyx-content-mode [data-testid="FloatingActionButton_Tweet"],
+html.tinyx-content-mode.tinyx-route-home .tinyx-home-navigation,
+html.tinyx-content-mode.tinyx-route-home .tinyx-home-composer {
+    display: none !important;
+}
+
+html.tinyx-content-mode main[role="main"] {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    margin: 0 !important;
+    flex: 1 1 100% !important;
+    align-items: stretch !important;
+}
+
+html.tinyx-content-mode main[role="main"] > div {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+}
+
+html.tinyx-content-mode [data-testid="primaryColumn"] {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    margin: 0 !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+    flex: 1 1 100% !important;
+}
+
+/* Tweet text, media, action buttons, detail headers and dialogs retain X's styles. */
