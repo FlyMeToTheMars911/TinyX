@@ -10,10 +10,13 @@ namespace TinyX;
 internal sealed class MainForm : Form
 {
     private const string HomeUrl = "https://x.com/home";
+    private const string TrayCaption = "TinyX · Ctrl+Alt+X 显示 / 隐藏";
+    private const double BytesPerMiB = 1024 * 1024;
     private const int LogicalDpi = 96;
     private const int BorderSize = 4;
     private const int WindowMargin = 12;
     private const double DocumentScrollOrigin = 0;
+    private static readonly TimeSpan TrayMemoryRefreshInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan ScriptTimeout = TimeSpan.FromMilliseconds(750);
     private static readonly TimeSpan SuspendTimeout = TimeSpan.FromSeconds(2);
     private readonly LaunchOptions _options;
@@ -41,6 +44,7 @@ internal sealed class MainForm : Form
     private bool _fixtureNavigationPending;
     private Rectangle? _compactBounds;
     private bool? _lastSuspendResult;
+    private long? _lastTrayMemoryRefresh;
 
     public MainForm(LaunchOptions options)
     {
@@ -102,16 +106,36 @@ internal sealed class MainForm : Form
         _tray = new NotifyIcon
         {
             Icon = _applicationIcon,
-            Text = "TinyX · Ctrl+Alt+X 显示 / 隐藏",
+            Text = TrayCaption,
             ContextMenuStrip = menu,
             Visible = !options.InspectProfile
         };
         _tray.DoubleClick += (_, _) => ShowWindow();
+        _tray.MouseMove += (_, _) => RefreshTrayMemory();
         Shown += async (_, _) =>
         {
             RestoreWindowBounds();
             await InitializeWebViewAsync();
         };
+    }
+
+    private void RefreshTrayMemory()
+    {
+        if (_lastTrayMemoryRefresh is long lastRefresh &&
+            Stopwatch.GetElapsedTime(lastRefresh) < TrayMemoryRefreshInterval)
+            return;
+        _lastTrayMemoryRefresh = Stopwatch.GetTimestamp();
+
+        try
+        {
+            MemorySnapshot memory = CaptureMemorySnapshot();
+            _tray.Text = $"{TrayCaption} · 内存 {memory.TotalWorkingSetBytes / BytesPerMiB:F1} MiB";
+        }
+        catch (Exception ex) when (ex is COMException or InvalidOperationException or NotImplementedException)
+        {
+            AppLog.Error("tray-memory-unavailable", ex);
+            _tray.Text = $"{TrayCaption} · 内存暂不可用";
+        }
     }
 
     protected override CreateParams CreateParams
@@ -859,7 +883,9 @@ internal sealed class MainForm : Form
         _visibilityGate.Release();
     }
 
-    private object CaptureMemorySnapshot()
+    private sealed record MemorySnapshot(long TotalWorkingSetBytes, long TotalPrivateBytes, List<object> Processes);
+
+    private MemorySnapshot CaptureMemorySnapshot()
     {
         var entries = new List<object>();
         long workingSet = 0;
@@ -881,7 +907,7 @@ internal sealed class MainForm : Form
             catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
             { AppLog.Error("diagnostics-process-unavailable", ex); }
         }
-        return new { TotalWorkingSetBytes = workingSet, TotalPrivateBytes = privateBytes, Processes = entries };
+        return new MemorySnapshot(workingSet, privateBytes, entries);
     }
 
     private Task WriteDiagnosticsAsync(object report)

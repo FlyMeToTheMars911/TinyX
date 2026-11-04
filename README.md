@@ -39,6 +39,8 @@ Windows 左下角的 X（Twitter）小窗。C# / WinForms / Microsoft Edge WebVi
 
 ## 开发与打包
 
+Windows 本地运行 `pack-local.cmd` 即可打包，产物位于 `dist/`。脚本优先使用 `work/tools/dotnet` 中的 SDK，也可以使用系统安装的 .NET 10 SDK。默认生成 x64 精简包，可传入 `-SelfContained` 或 `-Runtime win-arm64`。
+
 需要 .NET 10 SDK；修改网页脚本的检查需要 Node.js 22 或更新版本。
 
 ```powershell
